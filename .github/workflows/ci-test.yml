@@ -8,12 +8,18 @@ on:
 name: Run Test Cases
 jobs:
   test-on-mac:
-    runs-on: macos-10.15
+    runs-on: macos-12
     steps:
       - name: Checkout repo
         uses: actions/checkout@v2
         with:
           ref: ${{ github.ref }}
+      - name: Setup Java Version
+        uses: actions/setup-java@v2
+        with:
+          java-version: 11
+          distribution: temurin
+          cache: gradle
       - name: Run Cases
         uses: reactivecircus/android-emulator-runner@v2
         with:

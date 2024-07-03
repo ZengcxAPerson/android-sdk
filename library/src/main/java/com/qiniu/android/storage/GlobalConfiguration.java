@@ -3,8 +3,16 @@ package com.qiniu.android.storage;
 import android.content.Context;
 
 import com.qiniu.android.http.dns.Dns;
+import com.qiniu.android.utils.UrlSafeBase64;
 import com.qiniu.android.utils.Utils;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+/**
+ * 上传全局配置
+ */
 public class GlobalConfiguration {
 
     /**
@@ -59,7 +67,7 @@ public class GlobalConfiguration {
      * 设置 udp ipv4 server，请直接设置 {@link GlobalConfiguration#udpDnsIpv4Servers}
      * 此值不可修改
      */
-    public static String[] DefaultUdpDnsIpv4Servers = new String[]{"223.5.5.5", "114.114.114.114", "1.1.1.1", "208.67.222.222"};
+    public static String[] DefaultUdpDnsIpv4Servers = parseBase64Array("WyIyMjMuNS41LjUiLCAiMTE0LjExNC4xMTQuMTE0IiwgIjEuMS4xLjEiLCAiOC44LjguOCJd");
 
     /**
      * 使用 udp 进行 Dns 预取时的 server ipv4 数组；当对某个 Host 使用 udp 进行 Dns 预取时，会使用 server 数组进行并发预取
@@ -90,7 +98,7 @@ public class GlobalConfiguration {
      * 设置 doh ipv4 server，请直接设置 {@link GlobalConfiguration#dohIpv4Servers}
      * 此值不可修改
      */
-    public static String[] DefaultDohIpv4Servers = new String[]{"https://223.6.6.6/dns-query", "https://8.8.8.8/dns-query"};
+    public static String[] DefaultDohIpv4Servers = parseBase64Array("WyJodHRwczovLzIyMy42LjYuNi9kbnMtcXVlcnkiLCAiaHR0cHM6Ly84LjguOC44L2Rucy1xdWVyeSJd");
 
     /**
      * 使用 doh 预取时的 server 数组；当对某个 Host 使用 Doh 预取时，会使用 server 数组进行并发预取
@@ -128,12 +136,20 @@ public class GlobalConfiguration {
      */
     public int partialHostFrozenTime = 5 * 60;
 
+
+    /**
+     * 设置 connect check urls，请直接设置 {@link GlobalConfiguration#connectCheckURLStrings}
+     * 此值不可修改
+     */
+    public static String[] DefaultConnectCheckURLStrings = parseBase64Array("WyJodHRwczovL3d3dy5xaW5pdS5jb20iLCAiaHR0cHM6Ly93d3cuYmFpZHUuY29tIiwgImh0dHBzOi8vd3d3Lmdvb2dsZS5jb20iXQ==");
+
+
     /**
      * 网络连接状态检测使用的connectCheckURLStrings，网络链接状态检测可能会影响重试机制，启动网络连接状态检测有助于提高上传可用性。
      * 当请求的 Response 为网络异常时，并发对 connectCheckURLStrings 中 URLString 进行 HEAD 请求，以此检测当前网络状态的链接状态，其中任意一个 URLString 链接成功则认为当前网络状态链接良好；
      * 当 connectCheckURLStrings 为 nil 或者 空数组时则弃用检测功能。
      */
-    public String[] connectCheckURLStrings = new String[]{"https://www.qiniu.com", "https://www.baidu.com", "https://www.google.com"};
+    public String[] connectCheckURLStrings = null;
 
     /**
      * 网络连接状态检测HEAD请求超时，默认：2s
@@ -157,10 +173,20 @@ public class GlobalConfiguration {
     private GlobalConfiguration() {
     }
 
+    /**
+     * 获取全局配置单例
+     *
+     * @return 单例
+     */
     public static GlobalConfiguration getInstance() {
         return configuration;
     }
 
+    /**
+     * 获取 UDP dns ipv4 server 列表
+     *
+     * @return server 列表
+     */
     public String[] getUdpDnsIpv4Servers() {
         if (udpDnsIpv4Servers != null) {
             return udpDnsIpv4Servers;
@@ -169,6 +195,11 @@ public class GlobalConfiguration {
         }
     }
 
+    /**
+     * 获取 UDP dns ipv6 server 列表
+     *
+     * @return server 列表
+     */
     public String[] getUdpDnsIpv6Servers() {
         if (udpDnsIpv6Servers != null) {
             return udpDnsIpv6Servers;
@@ -177,6 +208,11 @@ public class GlobalConfiguration {
         }
     }
 
+    /**
+     * 获取 Doh ipv4 server 列表
+     *
+     * @return server 列表
+     */
     public String[] getDohIpv4Servers() {
         if (dohIpv4Servers != null) {
             return dohIpv4Servers;
@@ -185,11 +221,51 @@ public class GlobalConfiguration {
         }
     }
 
+    /**
+     * 获取 Doh 方式进行 Dns 预解析使用的 IPv6 Server
+     *
+     * @return Server 列表
+     */
     public String[] getDohIpv6Servers() {
         if (dohIpv6Servers != null) {
             return dohIpv6Servers;
         } else {
             return DefaultDohIpv6Servers;
+        }
+    }
+
+    /**
+     * 获取网络状态检测使用的 Url
+     *
+     * @return Url 列表
+     */
+    public String[] getConnectCheckUrls() {
+        if (connectCheckURLStrings != null) {
+            return connectCheckURLStrings;
+        } else {
+            return DefaultConnectCheckURLStrings;
+        }
+    }
+
+    /**
+     * 解析 Base64 数据为字符串数组
+     *
+     * @param data base64 data
+     * @return 字符串数组
+     */
+    public static String[] parseBase64Array(String data) {
+        try {
+            byte[] jsonBytes = UrlSafeBase64.decode(data);
+            JSONArray jsonArray = new JSONArray(new String(jsonBytes));
+            int count = jsonArray.length();
+            String[] items = new String[count];
+            for (int i = 0; i < count; i++) {
+                items[i] = jsonArray.getString(i);
+            }
+            return items;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
     }
 }

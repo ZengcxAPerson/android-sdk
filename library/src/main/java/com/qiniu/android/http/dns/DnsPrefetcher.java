@@ -6,9 +6,11 @@ import com.qiniu.android.common.ZoneInfo;
 import com.qiniu.android.common.ZonesInfo;
 import com.qiniu.android.http.ResponseInfo;
 import com.qiniu.android.http.metrics.UploadRegionRequestMetrics;
+import com.qiniu.android.storage.Configuration;
 import com.qiniu.android.storage.GlobalConfiguration;
 import com.qiniu.android.storage.UpToken;
 import com.qiniu.android.utils.AndroidNetwork;
+import com.qiniu.android.utils.ListUtils;
 import com.qiniu.android.utils.Utils;
 import com.qiniu.android.utils.Wait;
 
@@ -22,6 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by yangsen on 2020/5/28
+ *
+ * @hidden
  */
 public class DnsPrefetcher {
 
@@ -40,12 +44,25 @@ public class DnsPrefetcher {
         systemDns = new SystemDns(GlobalConfiguration.getInstance().dnsResolveTimeout);
     }
 
+    /**
+     * 获取 DnsPrefetcher 单例
+     *
+     * @return DnsPrefetcher 单例
+     */
     public static DnsPrefetcher getInstance() {
         return dnsPrefetcher;
     }
 
+    /**
+     * Dns 解析的最后一次异常信息
+     */
     public String lastPrefetchErrorMessage;
 
+    /**
+     * 从本地恢复缓存信息
+     *
+     * @return 是否恢复成功
+     */
     public boolean recoverCache() {
 
         DnsCacheFile recorder = getDiskCache();
@@ -66,14 +83,35 @@ public class DnsPrefetcher {
         return recoverDnsCache(data);
     }
 
+    /**
+     * 对 SDK 默认使用的域名进行 Dns 解析
+     */
     public void localFetch() {
         addPreFetchHosts(getLocalPreHost());
     }
 
+    /**
+     * 周期性的对 Zone 内的域名进行 Dns 解析
+     *
+     * @param currentZone zone
+     * @param token       上传 Token
+     * @return 是否配置成功
+     */
+    @Deprecated
     public boolean checkAndPrefetchDnsIfNeed(Zone currentZone, UpToken token) {
-        return addPreFetchHosts(getCurrentZoneHosts(currentZone, token));
+        return checkAndPrefetchDnsIfNeed(null, currentZone, token);
     }
 
+    public boolean checkAndPrefetchDnsIfNeed(Configuration configuration, Zone currentZone, UpToken token) {
+        return addPreFetchHosts(getCurrentZoneHosts(configuration, currentZone, token));
+    }
+
+    /**
+     * 周期性的对 hosts 进行 Dns 解析
+     *
+     * @param hosts 域名
+     * @return 是否配置成功
+     */
     public boolean addPreFetchHosts(String[] hosts) {
         if (hosts == null) {
             return false;
@@ -98,6 +136,11 @@ public class DnsPrefetcher {
         }
     }
 
+    /**
+     * 将内存中 address 对应的缓存设置为无效
+     *
+     * @param address host dns 解析记录
+     */
     public void invalidNetworkAddress(IDnsNetworkAddress address) {
         if (address == null || address.getHostValue() == null) {
             return;
@@ -125,6 +168,12 @@ public class DnsPrefetcher {
         addressDictionary.remove(host);
     }
 
+    /**
+     * 获取 host 的 Dns 预解析结果
+     *
+     * @param host 域名
+     * @return Dns 预解析结果
+     */
     public List<IDnsNetworkAddress> getInetAddressByHost(String host) {
         if (!isDnsOpen()) {
             return null;
@@ -141,6 +190,13 @@ public class DnsPrefetcher {
         return null;
     }
 
+    /**
+     * 通过安全的 Dns 解析对 host 进行预解析并返回解析的方式
+     *
+     * @param hostname 域名
+     * @return 解析的方式
+     * @throws UnknownHostException 异常信息
+     */
     public String lookupBySafeDns(String hostname) throws UnknownHostException {
         if (hostname == null || hostname.length() == 0) {
             return null;
@@ -173,11 +229,19 @@ public class DnsPrefetcher {
         return null;
     }
 
+    /**
+     * 清除 Dns 解析缓存
+     *
+     * @throws IOException 异常信息
+     */
     public void clearDnsCache() throws IOException {
         clearMemoryCache();
         clearDiskCache();
     }
 
+    /**
+     * 检查 Host Dns 预解析的缓存信息是否有效
+     */
     public void checkWhetherCachedDnsValid() {
         if (!prepareToPreFetch()) {
             return;
@@ -358,10 +422,18 @@ public class DnsPrefetcher {
         return true;
     }
 
+    /**
+     * 清除内存缓存
+     */
     public void clearMemoryCache() {
         addressDictionary.clear();
     }
 
+    /**
+     * 清除磁盘缓存
+     *
+     * @throws IOException 异常信息
+     */
     public void clearDiskCache() throws IOException {
         DnsCacheFile recorder = getDiskCache();
         if (recorder == null) {
@@ -375,25 +447,31 @@ public class DnsPrefetcher {
         return new String[]{Config.upLogURL};
     }
 
-    private String[] getCurrentZoneHosts(Zone currentZone, UpToken token) {
+    private String[] getCurrentZoneHosts(Configuration configuration, Zone currentZone, UpToken token) {
         if (currentZone == null || token == null) {
             return null;
         }
 
         final Wait wait = new Wait();
 
-        currentZone.preQuery(token, new Zone.QueryHandler() {
+        final ZonesInfo[] zonesInfoArray = {null};
+        currentZone.query(configuration, token, new Zone.QueryHandlerV2() {
             @Override
-            public void complete(int code, ResponseInfo responseInfo, UploadRegionRequestMetrics metrics) {
+            public void complete(ResponseInfo responseInfo, UploadRegionRequestMetrics metrics, ZonesInfo zonesInfo) {
+                zonesInfoArray[0] = zonesInfo;
                 wait.stopWait();
             }
         });
 
         wait.startWait();
 
-        ZonesInfo autoZonesInfo = currentZone.getZonesInfo(token);
+        if (zonesInfoArray[0] == null) {
+            return new String[]{};
+        }
+
+        ZonesInfo autoZonesInfo = zonesInfoArray[0];
         ArrayList<String> autoHosts = new ArrayList<>();
-        if (autoZonesInfo != null && autoZonesInfo.zonesInfo != null && autoZonesInfo.zonesInfo.size() > 0) {
+        if (!ListUtils.isEmpty(autoZonesInfo.zonesInfo)) {
             for (ZoneInfo zoneInfo : autoZonesInfo.zonesInfo) {
                 if (zoneInfo != null && zoneInfo.allHosts != null) {
                     autoHosts.addAll(zoneInfo.allHosts);
@@ -407,10 +485,20 @@ public class DnsPrefetcher {
         return prefetchHosts.toArray(new String[0]);
     }
 
+    /**
+     * 获取 Dns 配置是否打开
+     *
+     * @return Dns 配置是否打开
+     */
     public boolean isDnsOpen() {
         return GlobalConfiguration.getInstance().isDnsOpen;
     }
 
+    /**
+     * 获取是否正在进行 Dns 预解析操作
+     *
+     * @return 是否正在进行 Dns 预解析操作
+     */
     public synchronized boolean isPrefetching() {
         return isPrefetching;
     }

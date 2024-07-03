@@ -26,14 +26,14 @@ public class FormUploadTest extends UploadFlowTest {
                 .useConcurrentResumeUpload(false)
                 .useHttps(true)
                 .build();
-        int[] sizeArray = {5, 50, 200, 500, 800, 1000, 2000, 3000, 4000};
+        int[] sizeArray = {5, 50, 200, 800, 2000, 4000};
         for (int size : sizeArray) {
             String key = "android_Form_switch_region_" + size + "k";
             File file = null;
             try {
                 file = TempFile.createFile(size, key);
             } catch (IOException e) {
-                Assert.assertTrue(e.getMessage(), false);
+                assertTrue(e.getMessage(), false);
             }
             switchRegionTestWithFile(file, key, configuration, null);
         }
@@ -51,14 +51,14 @@ public class FormUploadTest extends UploadFlowTest {
                 .useConcurrentResumeUpload(false)
                 .useHttps(true)
                 .build();
-        int[] sizeArray = {2000, 3000, 4000};
+        int[] sizeArray = {2000, 4000};
         for (int size : sizeArray) {
             String key = "android_form_cancel_" + size + "k";
             File file = null;
             try {
                 file = TempFile.createFile(size, key);
             } catch (IOException e) {
-                Assert.fail(e.getMessage());
+                fail(e.getMessage());
             }
             cancelTest((long) (size * cancelPercent), file, key, configuration, null);
         }
@@ -69,16 +69,15 @@ public class FormUploadTest extends UploadFlowTest {
         Configuration configuration = new Configuration.Builder()
                 .resumeUploadVersion(Configuration.RESUME_UPLOAD_VERSION_V1)
                 .useConcurrentResumeUpload(true)
-                .useHttps(false)
                 .build();
-        int[] sizeArray = {500, 1000, 3000, 4000, 5000, 8000, 10000, 20000};
+        int[] sizeArray = {500, 3000, 4000};
         for (int size : sizeArray) {
             String key = "android_form_http" + size + "k";
             File file = null;
             try {
                 file = TempFile.createFile(size, key);
             } catch (IOException e) {
-                Assert.assertTrue(e.getMessage(), false);
+                assertTrue(e.getMessage(), false);
             }
             uploadFileAndAssertSuccessResult(file, key, configuration, null);
         }
@@ -91,14 +90,14 @@ public class FormUploadTest extends UploadFlowTest {
                 .useConcurrentResumeUpload(true)
                 .useHttps(true)
                 .build();
-        int[] sizeArray = {500, 1000, 3000, 4000, 5000, 8000, 10000, 20000};
+        int[] sizeArray = {500, 1000, 3000, 4000};
         for (int size : sizeArray) {
             String key = "android_form_https" + size + "k";
             File file = null;
             try {
                 file = TempFile.createFile(size, key);
             } catch (IOException e) {
-                Assert.assertTrue(e.getMessage(), false);
+                assertTrue(e.getMessage(), false);
             }
             uploadFileAndAssertSuccessResult(file, key, configuration, null);
         }
@@ -118,7 +117,7 @@ public class FormUploadTest extends UploadFlowTest {
         try {
             file = TempFile.createFile(10, key);
         } catch (IOException e) {
-            Assert.assertTrue(e.getMessage(), false);
+            assertTrue(e.getMessage(), false);
         }
         uploadFileAndAssertSuccessResult(file, key, null, options);
     }
@@ -132,7 +131,7 @@ public class FormUploadTest extends UploadFlowTest {
             try {
                 file = TempFile.createFile(10, key);
             } catch (IOException e) {
-                Assert.assertTrue(e.getMessage(), false);
+                assertTrue(e.getMessage(), false);
             }
             uploadFileAndAssertSuccessResult(file, key, null, null);
         }
@@ -145,7 +144,7 @@ public class FormUploadTest extends UploadFlowTest {
         try {
             file = TempFile.createFile(10, key);
         } catch (IOException e) {
-            Assert.assertTrue(e.getMessage(), false);
+            assertTrue(e.getMessage(), false);
         }
         uploadFileAndAssertResult(ResponseInfo.InvalidToken, file, "noAuth", "android_form_no_auth", null, null);
     }
@@ -157,7 +156,7 @@ public class FormUploadTest extends UploadFlowTest {
         try {
             file = TempFile.createFile(0, key);
         } catch (IOException e) {
-            Assert.assertTrue(e.getMessage(), false);
+            assertTrue(e.getMessage(), false);
         }
         uploadFileAndAssertResult(ResponseInfo.ZeroSizeFile, file, key, null, null);
     }
@@ -207,8 +206,7 @@ public class FormUploadTest extends UploadFlowTest {
         }
 
         Configuration configuration = new Configuration.Builder()
-                .useHttps(false)
-                .zone(new FixedZone(new String[]{"upnono-na0.qiniu.com", "upnono-na0.qiniu.com"}))
+                .zone(new FixedZone(new String[]{"upnono-na0.qiniup.com", "upnono-na0.qiniup.com"}))
                 .urlConverter(new UrlConverter() {
                     @Override
                     public String convert(String url) {

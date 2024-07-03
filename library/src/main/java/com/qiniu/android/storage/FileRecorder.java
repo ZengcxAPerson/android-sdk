@@ -1,19 +1,34 @@
 package com.qiniu.android.storage;
 
+import android.os.FileUtils;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.Date;
+import java.util.stream.Stream;
 
 /**
  * 实现分片上传时上传进度的接口方法
  */
 public final class FileRecorder implements Recorder {
 
+    /**
+     * 记录路径
+     */
     public String directory;
 
+    /**
+     * 构造方法
+     *
+     * @param directory 记录路径
+     * @throws IOException 异常
+     */
     public FileRecorder(String directory) throws IOException {
         this.directory = directory;
         File f = new File(directory);
@@ -123,6 +138,42 @@ public final class FileRecorder implements Recorder {
         f.delete();
     }
 
+    /**
+     * 删除所有路径
+     */
+    public void deleteAll() {
+        try {
+            File folder = new File(directory);
+            deleteDirectoryLegacyIO(folder);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void deleteDirectoryLegacyIO(File file) {
+        if (!file.exists()) {
+            return;
+        }
+
+        if (!file.isDirectory()) {
+            file.delete();
+            return;
+        }
+
+        File[] list = file.listFiles();
+        if (list != null) {
+            for (File temp : list) {
+                deleteDirectoryLegacyIO(temp);
+            }
+        }
+        file.delete();
+    }
+
+    /**
+     * 获取文件名
+     *
+     * @return 文件名
+     */
     @Override
     public String getFileName() {
         return null;

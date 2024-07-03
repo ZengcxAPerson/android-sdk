@@ -8,30 +8,56 @@ import com.qiniu.android.transaction.TransactionManager;
 import java.util.List;
 import java.util.Random;
 
+/**
+ * 服务控制监控
+ */
 public class ServerConfigMonitor {
     private static final String TransactionKey = "ServerConfig";
 
     private boolean enable = true;
-    private ServerConfigCache cache = new ServerConfigCache();
-    private static ServerConfigMonitor configMonitor = new ServerConfigMonitor();
+    private final ServerConfigCache cache = new ServerConfigCache();
+    private static final ServerConfigMonitor configMonitor = new ServerConfigMonitor();
 
+    private ServerConfigMonitor() {
+    }
+
+    /**
+     * 是否开启
+     *
+     * @param enable 是否开启
+     */
     public static void setEnable(boolean enable) {
         configMonitor.enable = enable;
     }
 
+    /**
+     * 配置上传 Token，SDK 会在上传文件时自动配置
+     *
+     * @param token 上传 Token
+     */
     public static void setToken(String token) {
         ServerConfigSynchronizer.setToken(token);
     }
 
+    /**
+     * 配置 server hosts
+     *
+     * @param hosts hosts
+     */
     public static void setServerHosts(String[] hosts) {
         ServerConfigSynchronizer.setHosts(hosts);
     }
 
+    /**
+     * 清理配置缓存
+     */
     public static void removeConfigCache() {
         configMonitor.cache.removeConfigCache();
     }
 
-    // 开始监控
+    /**
+     * 开始监控
+     */
     public synchronized static void startMonitor() {
         if (!configMonitor.enable) {
             return;
@@ -54,7 +80,9 @@ public class ServerConfigMonitor {
         transactionManager.addTransaction(transaction);
     }
 
-    // 停止监控
+    /**
+     * 停止监控
+     */
     public synchronized static void endMonitor() {
         TransactionManager transactionManager = TransactionManager.getInstance();
         List<TransactionManager.Transaction> transactions = transactionManager.transactionsForName(TransactionKey);
@@ -70,12 +98,6 @@ public class ServerConfigMonitor {
             return;
         }
 
-        if (cache.getConfig() == null) {
-            ServerConfig config = cache.getConfigFromDisk();
-            handleServerConfig(config);
-            cache.setConfig(config);
-        }
-
         ServerConfig serverConfig = cache.getConfig();
         if (serverConfig == null || !serverConfig.isValid()) {
             ServerConfigSynchronizer.getServerConfigFromServer(new ServerConfigSynchronizer.ServerConfigHandler() {
@@ -87,15 +109,10 @@ public class ServerConfigMonitor {
 
                     handleServerConfig(config);
                     cache.setConfig(config);
-                    cache.saveConfigToDisk(config);
                 }
             });
-        }
-
-        if (cache.getUserConfig() == null) {
-            ServerUserConfig config = cache.getUserConfigFromDisk();
-            handleServerUserConfig(config);
-            cache.setUserConfig(config);
+        } else {
+            handleServerConfig(serverConfig);
         }
 
         ServerUserConfig serverUserConfig = cache.getUserConfig();
@@ -109,9 +126,10 @@ public class ServerConfigMonitor {
 
                     handleServerUserConfig(config);
                     cache.setUserConfig(config);
-                    cache.saveUserConfigToDisk(config);
                 }
             });
+        } else {
+            handleServerUserConfig(serverUserConfig);
         }
     }
 
@@ -180,6 +198,24 @@ public class ServerConfigMonitor {
                 if (ipv6Servers != null && ipv6Servers.getIsOverride()) {
                     GlobalConfiguration.DefaultDohIpv6Servers = ipv6Servers.getServers();
                 }
+            }
+        }
+
+        // connect check 配置
+        ServerConfig.ConnectCheckConfig checkConfig = config.getConnectCheckConfig();
+        if (checkConfig != null) {
+            if (checkConfig.getEnable() != null) {
+                GlobalConfiguration.getInstance().connectCheckEnable = checkConfig.getEnable();
+            }
+
+            if (checkConfig.getTimeoutMs() != null) {
+                GlobalConfiguration.getInstance().connectCheckTimeout = checkConfig.getTimeoutMs();
+            }
+
+            String[] urls = checkConfig.getUrls();
+            Boolean isOverride = checkConfig.getOverride();
+            if (isOverride != null && isOverride && urls != null && urls.length > 0) {
+                GlobalConfiguration.DefaultConnectCheckURLStrings = urls;
             }
         }
     }

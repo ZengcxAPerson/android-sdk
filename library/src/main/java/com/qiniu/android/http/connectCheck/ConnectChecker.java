@@ -17,15 +17,34 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 网络连接检查器
+ *
+ * @hidden
+ */
 public class ConnectChecker {
 
     private static ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
     private static SingleFlight<UploadSingleRequestMetrics> singleFlight = new SingleFlight<>();
 
+    private ConnectChecker() {
+    }
+
+    /**
+     * 根据请求 metrics 判断网络是否正常连接
+     *
+     * @param metrics 请求 metrics
+     * @return 网络是否正常连接
+     */
     public static boolean isConnected(UploadSingleRequestMetrics metrics) {
         return metrics != null && metrics.getResponse() != null && metrics.getResponse().statusCode > 99;
     }
 
+    /**
+     * 检查网络是否正常连接
+     *
+     * @return 网络是否正常连接
+     */
     public static UploadSingleRequestMetrics check() {
 
         final CheckResult result = new CheckResult();
@@ -68,8 +87,8 @@ public class ConnectChecker {
     }
 
     private static void checkAllHosts(final CheckCompleteHandler completeHandler) {
-        String[] allHosts = GlobalConfiguration.getInstance().connectCheckURLStrings;
-        if (allHosts == null) {
+        String[] allHosts = GlobalConfiguration.getInstance().getConnectCheckUrls();
+        if (allHosts == null || allHosts.length == 0) {
             completeHandler.complete(null);
             return;
         }

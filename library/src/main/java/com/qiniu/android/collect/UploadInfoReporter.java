@@ -7,7 +7,6 @@ import com.qiniu.android.http.metrics.UploadRegionRequestMetrics;
 import com.qiniu.android.http.request.RequestTransaction;
 import com.qiniu.android.storage.UpToken;
 import com.qiniu.android.transaction.TransactionManager;
-import com.qiniu.android.utils.AsyncRun;
 import com.qiniu.android.utils.LogUtil;
 import com.qiniu.android.utils.StringUtils;
 import com.qiniu.android.utils.Utils;
@@ -24,11 +23,15 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 记录上报
+ *
+ * @hidden
+ */
 public class UploadInfoReporter {
     private static final String DelayReportTransactionName = "com.qiniu.uplog";
     private ReportConfig config = ReportConfig.getInstance();
@@ -50,10 +53,21 @@ public class UploadInfoReporter {
     private UploadInfoReporter() {
     }
 
+    /**
+     * 获取上报单例
+     *
+     * @return 上报单例
+     */
     public static UploadInfoReporter getInstance() {
         return instance;
     }
 
+    /**
+     * 上报记录
+     *
+     * @param reportItem  记录信息
+     * @param tokenString Token
+     */
     public synchronized void report(final ReportItem reportItem, final String tokenString) {
         if (!checkReportAvailable() || reportItem == null || tokenString == null || tokenString.length() == 0) {
             return;
@@ -76,6 +90,9 @@ public class UploadInfoReporter {
         });
     }
 
+    /**
+     * 清理
+     */
     public void clean() {
         cleanRecorderFile();
         cleanTempLogFile();
@@ -151,7 +168,7 @@ public class UploadInfoReporter {
     private void reportToServerIfNeeded(final String tokenString) {
         boolean needToReport = false;
         long currentTime = Utils.currentSecondTimestamp();
-        final long interval = (long)(config.interval * 60);
+        final long interval = (long) (config.interval * 60);
         if (recorderTempFile.exists()) {
             needToReport = true;
         } else if ((lastReportTime == 0 || (currentTime - lastReportTime) >= interval || recorderFile.length() > config.uploadThreshold) &&
@@ -235,7 +252,7 @@ public class UploadInfoReporter {
             randomAccessFile = new RandomAccessFile(recorderTempFile, "r");
             ByteArrayOutputStream out = new ByteArrayOutputStream(fileSize);
             int len = 0;
-            byte[] buff = new byte[fileSize];
+            byte[] buff = new byte[32*1024];
             while ((len = randomAccessFile.read(buff)) >= 0) {
                 out.write(buff, 0, len);
             }

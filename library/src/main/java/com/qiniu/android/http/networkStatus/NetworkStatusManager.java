@@ -1,209 +1,160 @@
 package com.qiniu.android.http.networkStatus;
 
-import com.qiniu.android.storage.FileRecorder;
-import com.qiniu.android.storage.Recorder;
-import com.qiniu.android.utils.AsyncRun;
+import com.qiniu.android.utils.Cache;
 import com.qiniu.android.utils.Utils;
 
-import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.Iterator;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
+/**
+ * 网络状态管理器
+ *
+ * @hidden
+ */
 public class NetworkStatusManager {
 
-    private static String kNetworkStatusDiskKey = "NetworkStatus:v1.0.0";
+    private static final NetworkStatusManager networkStatusManager = new NetworkStatusManager();
 
-    private boolean hasInit = false;
-    private boolean isHandlingNetworkInfoOfDisk = false;
-    private Recorder recorder;
-    private ConcurrentHashMap<String, NetworkStatus> networkStatusInfo;
-    private static NetworkStatusManager networkStatusManager = new NetworkStatusManager();
-    private final ExecutorService executorService = new ThreadPoolExecutor(1, 2,
-            120L, TimeUnit.MILLISECONDS,
-            new LinkedBlockingQueue<Runnable>());
+    private final Cache cache = new Cache.Builder(NetworkStatus.class)
+            .setVersion("v2")
+            .setFlushCount(10)
+            .builder();
 
+    /**
+     * 获取单例
+     *
+     * @return NetworkStatusManager 单例
+     */
     public static NetworkStatusManager getInstance() {
-        networkStatusManager.initData();
         return networkStatusManager;
     }
 
-    public synchronized void initData() {
-        if (hasInit){
-            return;
-        }
-        hasInit = true;
-        networkStatusManager.networkStatusInfo = new ConcurrentHashMap<>();
-        networkStatusManager.asyncRecoverNetworkStatusFromDisk();
+    private NetworkStatusManager() {
     }
 
+    /**
+     * 获取网络状态唯一标识
+     *
+     * @param host host
+     * @param ip   ip
+     * @return 唯一标识
+     */
     @Deprecated
     public static String getNetworkStatusType(String host, String ip) {
         return Utils.getIpType(ip, host);
     }
 
+    /**
+     * 获取网络状态唯一标识
+     *
+     * @param httpVersion httpVersion
+     * @param host        host
+     * @param ip          ip
+     * @return 唯一标识
+     */
     public static String getNetworkStatusType(String httpVersion, String host, String ip) {
         return Utils.getIpType(httpVersion, ip, host);
     }
 
+    /**
+     * 获取网络状态
+     *
+     * @param type 网络状态唯一标识
+     * @return 网络状态
+     */
     public NetworkStatus getNetworkStatus(String type) {
-        if (type == null || type.length() == 0) {
+        if (type == null || type.isEmpty()) {
             return null;
         }
-        NetworkStatus status = networkStatusInfo.get(type);
-        if (status == null) {
-            status = new NetworkStatus();
-        }
-        return status;
-    }
 
-    public void updateNetworkStatus(String type, int speed) {
-        if (type == null || type.length() == 0) {
-            return;
-        }
-        NetworkStatus status = networkStatusInfo.get(type);
-        if (status == null) {
-            status = new NetworkStatus();
-            networkStatusInfo.put(type, status);
+        Cache.Object object = cache.cacheForKey(type);
+        if (object instanceof NetworkStatus) {
+            return (NetworkStatus) object;
         } else {
-            speed = (int)((float)speed * 0.4  + (float)status.getSpeed() * 0.6);
+            return new NetworkStatus();
         }
-        status.setSpeed(speed);
-
-        asyncRecordNetworkStatusInfo();
     }
 
-    // ---------- 持久化 -----------
-    private void asyncRecordNetworkStatusInfo() {
-        synchronized (this) {
-            if (isHandlingNetworkInfoOfDisk) {
-                return;
-            }
-            isHandlingNetworkInfoOfDisk = true;
-        }
-        executorService.submit(new Runnable() {
-            @Override
-            public void run() {
-                recordNetworkStatusInfo();
-                isHandlingNetworkInfoOfDisk = false;
-            }
-        });
-    }
-
-    private void asyncRecoverNetworkStatusFromDisk() {
-        synchronized (this) {
-            if (isHandlingNetworkInfoOfDisk) {
-                return;
-            }
-            isHandlingNetworkInfoOfDisk = true;
-        }
-        executorService.submit(new Runnable() {
-            @Override
-            public void run() {
-                recoverNetworkStatusFromDisk();
-                isHandlingNetworkInfoOfDisk = true;
-            }
-        });
-    }
-
-    private void recordNetworkStatusInfo() {
-
-        setupRecorder();
-
-        if (recorder == null || networkStatusInfo == null) {
+    /**
+     * 更新网络状态
+     *
+     * @param type  网络状态唯一标识
+     * @param speed 网速
+     */
+    public void updateNetworkStatus(String type, int speed) {
+        if (type == null || type.isEmpty()) {
             return;
         }
 
-        JSONObject networkStatusInfoJson = new JSONObject();
-        for (String key : networkStatusInfo.keySet()) {
-            NetworkStatus status = networkStatusInfo.get(key);
-            if (status != null) {
-                try {
-                    networkStatusInfoJson.put(key, status.toJson());
-                } catch (Exception ignored) {
-                }
-            }
-        }
-        recorder.set(kNetworkStatusDiskKey, networkStatusInfoJson.toString().getBytes());
+        NetworkStatus status = new NetworkStatus();
+        status.speed = speed;
+        this.cache.cache(type, status, false);
     }
 
-    private void recoverNetworkStatusFromDisk() {
-
-        setupRecorder();
-
-        if (recorder == null || networkStatusInfo == null) {
-            return;
-        }
-
-        byte[] networkStatusInfoData = recorder.get(kNetworkStatusDiskKey);
-        JSONObject networkStatusInfoJSON = null;
-        try {
-            networkStatusInfoJSON = new JSONObject(new String(networkStatusInfoData));
-        } catch (Exception ignored) {
-            return;
-        }
-
-        for (Iterator<String> it = networkStatusInfoJSON.keys(); it.hasNext(); ) {
-            String key = it.next();
-            try {
-                JSONObject statusJson = networkStatusInfoJSON.getJSONObject(key);
-                NetworkStatus status = NetworkStatus.statusFromJson(statusJson);
-                if (status != null) {
-                    networkStatusInfo.put(key, status);
-                }
-            } catch (JSONException ignored) {
-            }
-        }
-    }
-
-
-    private synchronized void setupRecorder() {
-        if (recorder == null) {
-            try {
-                recorder = new FileRecorder(Utils.sdkDirectory() + "/NetworkInfo");
-            } catch (Exception ignored) {
-            }
-        }
-    }
-
+    /**
+     * default speed
+     */
     protected static final int DefaultSpeed = 600;
-    public static class NetworkStatus {
+
+    /**
+     * 网络状态
+     *
+     * @hidden
+     */
+    public static class NetworkStatus implements Cache.Object {
 
         private int speed = DefaultSpeed;
 
+        /**
+         * 获取速度
+         *
+         * @return 速度
+         */
         public int getSpeed() {
             return speed;
         }
 
+        /**
+         * 设置速度
+         *
+         * @param speed speed
+         */
         public void setSpeed(int speed) {
             this.speed = speed;
         }
 
-        private JSONObject toJson() {
+        private NetworkStatus() {
+        }
+
+        /**
+         * 构造函数
+         *
+         * @param jsonObject 网络状态 json 数据
+         */
+        public NetworkStatus(JSONObject jsonObject) {
+            if (jsonObject == null) {
+                return;
+            }
+
+            try {
+                this.speed = jsonObject.getInt("speed");
+            } catch (Exception ignored) {
+            }
+        }
+
+        /**
+         * 获取 json 数据
+         *
+         * @return json 数据
+         */
+        @Override
+        public JSONObject toJson() {
             JSONObject jsonObject = new JSONObject();
             try {
                 jsonObject.put("speed", speed);
             } catch (Exception ignored) {
             }
             return jsonObject;
-        }
-
-        private static NetworkStatus statusFromJson(JSONObject jsonObject) {
-            if (jsonObject == null) {
-                return null;
-            }
-
-            NetworkStatus status = new NetworkStatus();
-            try {
-                status.speed = jsonObject.getInt("speed");
-            } catch (Exception ignored) {
-            }
-            return status;
         }
     }
 }
